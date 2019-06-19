@@ -111,7 +111,6 @@ def get_batch_preds(batch_reps, ne_reps, tag2mask, args, ne_tag_seqs=None):
         _, bps, _, keysbylen, _ = dp_single(labe_probs, ne_tag_seqs, labe2idx, args.c)
         pred, num_copies = backtrack(bps, keysbylen, idx2tag)
         preds = [pred]
-        #print("oy", preds, num_copies)
     else:
         # get a single tag pred for each token
         _, preds = torch.stack(tagscores).max(0) # bsz*T
@@ -119,7 +118,6 @@ def get_batch_preds(batch_reps, ne_reps, tag2mask, args, ne_tag_seqs=None):
         # map back to tags (and transpose)
         idx2tag = {i: tagtype for i, (tagtype, _) in enumerate(tag2mask)}
         preds = [[idx2tag[idx.item()] for idx in row] for row in preds]
-        #print("oy", preds)
     return preds, num_copies
 
 def train(sentdb, model, optim, device, args):
