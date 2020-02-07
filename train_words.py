@@ -312,6 +312,9 @@ if __name__ == "__main__":
         sentdb = data.SentDB(args.sent_fi, args.tag_fi, tokenizer, args.val_sent_fi,
                              args.val_tag_fi, lower=args.lower,
                              align_strat=args.align_strat, subsample_all=args.subsample_all)
+        if args.db_fi is not None:
+            print("saving db to", args.db_fi)
+            sentdb.save(args.db_fi)
 
         nebert = model.bert
         if args.zero_shot and "newne" not in args.just_eval:
