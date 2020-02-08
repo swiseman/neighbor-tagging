@@ -164,7 +164,7 @@ def do_fscore(sentdb, model, device, args):
         ne_reps = model.get_word_reps(  # nesz x max_len x dim
             neighbs, Cn, shard_bsz=args.pred_shard_size)
         preds = get_batch_preds(batch_reps, ne_reps.view(-1, ne_reps.size(2)),
-                                tag2mask, args) # bsz x T
+                                tag2mask, args)[0] # bsz x T
         if args.acc_eval:
             bpred, bcrct = eval_util.batch_acc_eval(preds, gold)
             bgold = bpred
@@ -227,10 +227,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-bert_model", default="bert-base-cased", type=str,
                     choices=["bert-base-uncased", "bert-large-uncased", "bert-base-cased"])
 parser.add_argument("-lower", action='store_true', help="")
-parser.add_argument("-sent_fi", default="data/ptb/ptb-train.words", type=str, help="")
-parser.add_argument("-tag_fi", default="data/ptb/ptb-train.tags", type=str, help="")
-parser.add_argument("-val_sent_fi", default="data/ptb/ptb-dev.words", type=str, help="")
-parser.add_argument("-val_tag_fi", default="data/ptb/ptb-dev.tags", type=str, help="")
+parser.add_argument("-sent_fi", default="data/conll2003/conll2003-train.words", type=str, help="")
+parser.add_argument("-tag_fi", default="data/conll2003/conll2003-train.nertags", type=str, help="")
+parser.add_argument("-val_sent_fi", default="data/conll2003/conll2003-dev.words", type=str, help="")
+parser.add_argument("-val_tag_fi", default="data/conll2003/conll2003-dev.nertags", type=str, help="")
 parser.add_argument("-db_fi", default="default_sentdb.pt", type=str, help="")
 parser.add_argument("-load_saved_db", action='store_true', help="")
 parser.add_argument('-bsz', type=int, default=16, help='')
@@ -245,15 +245,15 @@ parser.add_argument("-clip", default=1, type=float, help="")
 parser.add_argument("-warmup_prop", default=0.1, type=float,
                     help="Proportion of training to perform linear learning rate warmup for.  "
                          "E.g., 0.1 = 10%% of training.")
-parser.add_argument('-epochs', type=int, default=40, help='')
+parser.add_argument('-epochs', type=int, default=10, help='')
 parser.add_argument('-log_interval', type=int, default=100, help='')
 parser.add_argument('-save', type=str, default='', help='path to save the final model')
 
-parser.add_argument('-ne_per_sent', type=int, default=20, help='')
+parser.add_argument('-ne_per_sent', type=int, default=50, help='')
 parser.add_argument("-random_tr_ne", action='store_true', help="")
 parser.add_argument('-eval_ne_per_sent', type=int, default=100, help='')
 parser.add_argument("-acc_eval", action='store_true', help="")
-parser.add_argument('-pred_shard_size', type=int, default=32, help='')
+parser.add_argument('-pred_shard_size', type=int, default=64, help='')
 parser.add_argument("-cosine", action='store_true', help="")
 parser.add_argument("-align_strat", type=str, default="first",
                     choices=["sum", "first", "last"])
@@ -261,7 +261,7 @@ parser.add_argument("-detach_db", action='store_true', help="")
 parser.add_argument("-subsample_all", action='store_true', help="")
 parser.add_argument("-cachedir", type=str, default="/scratch/samstuff/bertmodels")
 parser.add_argument("-just_eval", type=str, default=None,
-                    choices=["dev", "test", "dev-newne", "test-newne"], help="")
+                    choices=["dev", "dev-newne"], help="")
 parser.add_argument("-zero_shot", action='store_true', help="")
 
 parser.add_argument("-dp_pred", action='store_true', help="")
@@ -302,7 +302,7 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained(
         args.bert_model, do_lower_case=args.lower, never_split=nosplits,
         cache_dir=CACHEDIR)
-    print("make sure you agree with never_splits!")
+    #print("make sure you agree with never_splits!")
 
     if args.load_saved_db and args.db_fi is not None:
         print("loading db from", args.db_fi)
@@ -312,14 +312,12 @@ if __name__ == "__main__":
         sentdb = data.SentDB(args.sent_fi, args.tag_fi, tokenizer, args.val_sent_fi,
                              args.val_tag_fi, lower=args.lower,
                              align_strat=args.align_strat, subsample_all=args.subsample_all)
-        if args.db_fi is not None:
-            print("saving db to", args.db_fi)
-            sentdb.save(args.db_fi)
 
         nebert = model.bert
         if args.zero_shot and "newne" not in args.just_eval:
             nebert = BertModel.from_pretrained(args.bert_model, cache_dir=CACHEDIR)
             nebert = nebert.to(device)
+
         def avg_bert_emb(x):
             mask = (x != 0)
             rep, _ = nebert(x, attention_mask=mask.long(), output_all_encoded_layers=False)
@@ -391,9 +389,6 @@ if __name__ == "__main__":
     for ep in range(args.epochs):
         trloss = train(sentdb, model, optimizer, device, args)
         print("Epoch {:3d} | train loss {:8.3f}".format(ep, trloss))
-        # with torch.no_grad():
-        #     valloss = validate(sentdb, model, device, args)
-        # print("Epoch {:3d} | val loss {:8.3f}".format(ep, valloss))
         with torch.no_grad():
             prec, rec, f1 = do_fscore(sentdb, model, device, args)
             print("Epoch {:3d} | P: {:3.5f} / R: {:3.5f} / F: {:3.5f}".format(
