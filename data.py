@@ -10,6 +10,8 @@ from collections import Counter, defaultdict
 from torch.nn.utils.rnn import pad_sequence
 from torch.nn.functional import normalize
 
+import datasets
+
 class Batch(object):
     def __init__(self, sidx, eidx, neidxs=None, max_crct=None, tgt_nzs=None,
                  tgt_nz_idxs=None, xalign=None, nalign=None):
@@ -23,14 +25,12 @@ class Batch(object):
         self.nalign = nalign
 
 class SentDB(object):
-    def __init__(self, tr_wrdfi, tr_tagfi, tokenizer, val_wrdfi=None, val_tagfi=None,
-                 lower=False, path=None, align_strat="last", subsample_all=False,
-                 parampred=False):
-        self.word_level = True
-        self.align_strat = align_strat
-        self.subsample = 2500
-        self.subsample_all = subsample_all
+    def __init__(self, tagkey, tokenizer, cachedir, lower=False, path=None, align_strat="last",
+                 subsample_all=False, parampred=False, test=False):
+        self.tagkey, self.tokenizer, self.align_strat = tagkey, tokenizer, align_strat
+        self.cachedir, self.subsample, self.subsample_all = cachedir, 2500, subsample_all
         self.parampred = parampred
+
         if path is not None:
             statedict = torch.load(path)
             self.sent_words = statedict["sent_words"]
@@ -47,26 +47,28 @@ class SentDB(object):
                 self.vtop_nes = statedict["vtop_nes"]
         else:
             self.sent_words, self.sent_wpcs, self.sent_tags = SentDB.get_wrd_pcs_tags(
-                tr_wrdfi, tr_tagfi, tokenizer, lower=lower)
+                "train", self.tagkey, self.tokenizer, self.cachedir, lower=lower)
             # get tag2sents just in case we need to supplement
             self.tag2sent = defaultdict(set)
             for i, tags in enumerate(self.sent_tags):
                 [self.tag2sent[tag].add(i) for tag in tags]
 
-            if val_wrdfi is not None and val_tagfi is not None:
-                self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
-                    val_wrdfi, val_tagfi, tokenizer, lower=lower)
-        tagtypes = set()
-        [tagtypes.update(seq) for seq in self.sent_tags]
-        self.tagtypes = sorted(tagtypes)
-        if self.parampred:
-            self.tag2idx = {tt: i for i, tt in enumerate(self.tagtypes)}
+            valsplit = "test" if test else "validation"
+            self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
+                valsplit, self.tagkey, self.tokenizer, self.cachedir, lower=lower)
+
+        self.tagtypes = sorted(self.tag2sent.keys())
+        self.label_list = datasets.load_dataset( # idx 2 label name
+            "conll2003", cache_dir=cachedir)["train"].features["ner_tags"].feature.names
+
+        # if self.parampred:
+        #     self.tag2idx = {tt: i for i, tt in enumerate(self.tagtypes)}
 
     def replace_val_w_test(self, te_wrdfi, te_tagfi, tokenizer, emb_func, device,
                            ne_bsz=128, nne=500, lower=False):
         print("there were", len(self.vsent_words), "val sentences")
-        self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
-            te_wrdfi, te_tagfi, tokenizer, lower=lower)
+        #self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
+        #    te_wrdfi, te_tagfi, tokenizer, lower=lower)
         assert len(self.vsent_words) == len(self.vsent_wpcs)
         assert len(self.vsent_words) == len(self.vsent_tags)
         print("now there are", len(self.vsent_words), "val sentences")
@@ -80,29 +82,33 @@ class SentDB(object):
             self.vtop_nes = [[idx.item() for idx in row] for row in argtop]
 
     @staticmethod
-    def get_wrd_pcs_tags(wrdfi, tagfi, tokenizer, lower=False):
+    def get_wrd_pcs_tags(splitkey, tagkey, tokenizer, cachedir, lower=False):
+        split = datasets.load_dataset("conll2003", cache_dir=cachedir)[splitkey]
         sent_words, sent_wpcs, sent_tags = [], [], []
-        with open(wrdfi) as f1:
-            with open(tagfi) as f2:
-                for line in f1:
-                    sent = line.strip()
-                    # N.B. don't need to lower, since tokenizer does it automatically
-                    # if lower:
-                    #     sent = sent.lower()
-                    words = sent.split()
-                    tags = f2.readline().strip().split()
-                    assert len(tags) == len(words)
-                    wpcs = ["[CLS]"]
-                    wpcs.extend(tokenizer.tokenize(sent))
-                    wpcs.append("[SEP]")
-                    try:
-                        aligns = SentDB.align_wpcs(words, wpcs, lower=lower)
-                    except AssertionError:
-                        print("ignoring one from", wrdfi)
-                        continue
-                    sent_wpcs.append(tokenizer.convert_tokens_to_ids(wpcs))
-                    sent_words.append(aligns)
-                    sent_tags.append(tags)
+        for thing in split:
+            # if len(sent_tags) >= 500:
+            #     break
+            sent_tags.append(thing[tagkey])
+            tokout = tokenizer(thing["tokens"], is_split_into_words=True)
+            sent_wpcs.append(tokout['input_ids'])
+            # just assume align first strategy for now
+            aligns, prev_word_idx = [], None
+            for i, word_idx in enumerate(tokout.word_ids()):
+                if word_idx is not None and word_idx != prev_word_idx:
+                    aligns.append((i,))
+                prev_word_idx = word_idx
+
+            # words = thing["tokens"]
+            # wpcs = ([tokenizer.cls_token]
+            #         + tokenizer.tokenize(words, is_split_into_words=True)
+            #         + [tokenizer.sep_token])
+            # try:
+            #     aligns = SentDB.align_wpcs(words, wpcs, lower=lower)
+            # except AssertionError:
+            #     print("ignoring one from", split)
+            #     continue
+            # sent_wpcs.append(tokenizer.convert_tokens_to_ids(wpcs))
+            sent_words.append(aligns)
         # shuffle before sorting by length
         perm = [t.item() for t in torch.randperm(len(sent_words))]
         perm.sort(key=lambda idx: len(sent_words[idx]))
@@ -123,7 +129,6 @@ class SentDB(object):
         for i in range(1, len(wpcs)-1): # ignore [SEP] final token
             strpd = wpcs[i][2:] if wpcs[i].startswith("##") else wpcs[i]
             buf.append(strpd)
-            #buf.append(wpcs[i].lstrip('##'))
             fwrd = ''.join(buf)
             wrd = words[curr_wrd].lower() if lower else words[curr_wrd]
             if fwrd == wrd or fwrd == "[UNK]":
@@ -164,6 +169,9 @@ class SentDB(object):
 
     def compute_top_neighbs(self, bsz, emb_func, nne, device, cosine=True, ignore_trne=False):
         trembs = self.get_all_embs(bsz, emb_func, device, cosine=cosine)
+        if trembs.size(0) < nne:
+            print("only retrieving", trembs.size(0), "neigbors...")
+            nne = trembs.size(0)
         if ignore_trne:
             self.top_nes = None
         else:
@@ -363,26 +371,20 @@ class SentDB(object):
         minibatches = []
         for i in range(len(sent_words)):
             if len(sent_words[i]) != curr_len or i-start == bsz: # we're done
-                if self.word_level:
-                    if random_tr_ne or self.parampred:
-                        batch = Batch(start, i, max_crct=ne_per_sent) # HACK!
-                    else:
-                        batch = self.precompute_word_batch(start, i, ne_per_sent, val=val)
-                    minibatches.append(batch)
+                if random_tr_ne or self.parampred:
+                    batch = Batch(start, i, max_crct=ne_per_sent) # HACK!
                 else:
-                    pass
+                    batch = self.precompute_word_batch(start, i, ne_per_sent, val=val)
+                minibatches.append(batch)
                 curr_len, start = len(sent_words[i]), i
         # catch last
         if len(sent_words) > start:
-            if self.word_level:
-                if random_tr_ne or self.parampred:
-                    batch = Batch(start, len(sent_words), max_crct=ne_per_sent) # HACK!
-                else:
-                    batch = self.precompute_word_batch(
-                        start, len(sent_words), ne_per_sent, val=val)
-                minibatches.append(batch)
+            if random_tr_ne or self.parampred:
+                batch = Batch(start, len(sent_words), max_crct=ne_per_sent) # HACK!
             else:
-                pass
+                batch = self.precompute_word_batch(
+                    start, len(sent_words), ne_per_sent, val=val)
+            minibatches.append(batch)
         if val:
             self.val_minibatches = minibatches
         else:

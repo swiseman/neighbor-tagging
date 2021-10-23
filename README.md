@@ -15,6 +15,10 @@ To train the neighbor-based NER model, run:
 python -u train_words.py -cuda -db_fi ner-cased-first-b16-n50.pt -detach_db -save mynermodel.pt
 ```
 
+```
+python -u train_words.py -cuda -lr 5e-5 -num_warmup_steps 1000 -detach_db -ne_per_sent 50 -eval_ne_per_sent 100 -bsz 32
+```
+
 By default the above script will save a database file to the argument of `-db_fi`. Once the database file has been saved, you can rerun the above with `-load_saved_db` to avoid retokenizing everything.
 
 The other models can be trained analogously, by substituting in the correct data files in `data/`; see the options in `train_words.py`. For POS tasks, the `-acc_eval` flag should be used, and we used a batch size of 20 and a learning rate of 2E-05.
