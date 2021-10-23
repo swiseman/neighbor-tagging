@@ -1,6 +1,3 @@
-"""
-this file modified from the word_language_model example
-"""
 import os
 import random
 import torch
@@ -97,17 +94,6 @@ class SentDB(object):
                 if word_idx is not None and word_idx != prev_word_idx:
                     aligns.append((i,))
                 prev_word_idx = word_idx
-
-            # words = thing["tokens"]
-            # wpcs = ([tokenizer.cls_token]
-            #         + tokenizer.tokenize(words, is_split_into_words=True)
-            #         + [tokenizer.sep_token])
-            # try:
-            #     aligns = SentDB.align_wpcs(words, wpcs, lower=lower)
-            # except AssertionError:
-            #     print("ignoring one from", split)
-            #     continue
-            # sent_wpcs.append(tokenizer.convert_tokens_to_ids(wpcs))
             sent_words.append(aligns)
         # shuffle before sorting by length
         perm = [t.item() for t in torch.randperm(len(sent_words))]
@@ -116,28 +102,6 @@ class SentDB(object):
         sent_wpcs = [sent_wpcs[idx] for idx in perm]
         sent_tags = [sent_tags[idx] for idx in perm]
         return sent_words, sent_wpcs, sent_tags
-
-    @staticmethod
-    def align_wpcs(words, wpcs, lower=False):
-        """
-        maps each word idx to start and end idx w/ in wpcs.
-        assumes wpcs is padded on either end with CLS and SEP
-        """
-        align = []
-        curr_start, curr_wrd = 1, 0 # start at 1, b/c of CLS
-        buf = []
-        for i in range(1, len(wpcs)-1): # ignore [SEP] final token
-            strpd = wpcs[i][2:] if wpcs[i].startswith("##") else wpcs[i]
-            buf.append(strpd)
-            fwrd = ''.join(buf)
-            wrd = words[curr_wrd].lower() if lower else words[curr_wrd]
-            if fwrd == wrd or fwrd == "[UNK]":
-                align.append((curr_start, i+1))
-                curr_start = i+1
-                curr_wrd += 1
-                buf = []
-        assert curr_wrd == len(words)
-        return align
 
     def get_all_embs(self, bsz, emb_func, device, cosine=True, val=False):
         if val:

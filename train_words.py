@@ -38,8 +38,6 @@ class TagWordModel(nn.Module):
                 # get shardsz x npcs x dim bertrep
                 mask = (xsplit != 0).long()
                 bertrep = self.bert(input_ids=xsplit, attention_mask=mask)["last_hidden_state"]
-                # bertrep, _ = self.bert(xsplit, attention_mask=mask,
-                #                        output_all_encoded_layers=False)
                 splitrep = torch.bmm(Csplits[i], bertrep) # shardsz x T x dim
                 wreps.append(splitrep) # shardsz x T x dim
             wreps = torch.cat(wreps, 0) # bsz x T x dim
@@ -47,8 +45,6 @@ class TagWordModel(nn.Module):
             mask = (x != 0).long()
             bertrep = self.bert( # bsz x num_pcs x dim
                 input_ids=x, attention_mask=mask)["last_hidden_state"]
-            # bertrep, _ = self.bert(x, attention_mask=mask,
-            #                        output_all_encoded_layers=False) # bsz x num_pcs x dim
             # get word reps by selecting or adding pieces
             wreps = torch.bmm(C, bertrep) # bsz x T x dim
         return wreps
@@ -175,27 +171,12 @@ def do_fscore(sentdb, model, metric, device, args):
                       for goldseq in gold]
         predlabels = [[sentdb.label_list[plabel] for plabel in predseq]
                       for predseq in preds]
-        # import ipdb
-        # ipdb.set_trace()
         metric.add_batch(predictions=predlabels, references=goldlabels)
     results = metric.compute() # should delete cached predictions/golds
     return {"precision": results["overall_precision"],
             "recall": results["overall_recall"],
             "f1": results["overall_f1"],
             "accuracy": results["overall_accuracy"]}
-
-    #     if args.acc_eval:
-    #         bpred, bcrct = eval_util.batch_acc_eval(preds, gold)
-    #         bgold = bpred
-    #     else:
-    #         bpred, bgold, bcrct = eval_util.batch_span_eval(preds, gold)
-    #     total_pred += bpred
-    #     total_gold += bgold
-    #     total_crct += bcrct
-    # microp = total_crct/total_pred if total_pred > 0 else 0
-    # micror = total_crct/total_gold if total_gold > 0 else 0
-    # microf1 = 2*microp*micror/(microp + micror)
-    # return microp, micror, microf1
 
 
 # the point of this is so we don't mix neighbors based on other stuff in the minibatch
@@ -228,24 +209,6 @@ def do_single_fscore(sentdb, model, device, args):
         metric.add_batch(predictions=predlabels, references=goldlabels)
     results = metric.compute()
     print(results)
-        #if ncopies is not None:
-        #    total_copies += ncopies
-        #if args.acc_eval:
-        #    bpred, bcrct = eval_util.batch_acc_eval(preds, gold)
-        #    bgold = bpred
-        #else:
-        #    bpred, bgold, bcrct = eval_util.batch_span_eval(preds, gold)
-        #total_pred += bpred
-        #total_gold += bgold
-        #total_crct += bcrct
-        #total_words += Cx.size(1)
-    #if args.dp_pred:
-    #    print("avg moves/sent", total_copies/len(sentdb.vsent_words))
-    #    print("avg words/move", total_words/total_copies)
-    #microp = total_crct/total_pred if total_pred > 0 else 0
-    #micror = total_crct/total_gold if total_gold > 0 else 0
-    #microf1 = 2*microp*micror/(microp + micror)
-    #return microp, micror, microf1
 
 
 parser = argparse.ArgumentParser()
@@ -301,8 +264,6 @@ if __name__ == "__main__":
         level=logging.INFO)
     logger.setLevel(logging.INFO)
 
-    # stuff copied from huggingface
-    #accelerator = Accelerator()
     torch.set_num_threads(2)
     #torch.manual_seed(args.seed)
     transformers.set_seed(args.seed)
