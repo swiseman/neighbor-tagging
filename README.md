@@ -1,5 +1,7 @@
 Code for [Label-Agnostic Sequence Labeling by Copying Nearest Neighbors](https://www.aclweb.org/anthology/P19-1533.pdf).
 
+**Update 10/2021:** An updated version of the code, which uses the latest version of the Huggingface transformers and datasets libraries is now in the [update](https://github.com/swiseman/neighbor-tagging/tree/update) branch.
+
 # Dependencies
 The code was developed and tested with pytorch-pretrained-bert 0.5.1. (So you may need to do something like `pip install pytorch-pretrained-bert==0.5.1`).
 
