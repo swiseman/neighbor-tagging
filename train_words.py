@@ -218,7 +218,7 @@ parser.add_argument("-tagkey", default="ner_tags", type=str,
                     choices=["ner_tags", "pos_tags", "chunk_tags"])
 parser.add_argument("-db_fi", default=None, type=str, help="")
 parser.add_argument("-load_saved_db", action='store_true', help="")
-parser.add_argument('-bsz', type=int, default=16, help='')
+parser.add_argument('-bsz', type=int, default=8, help='')
 parser.add_argument('-seed', type=int, default=3435, help='')
 parser.add_argument("-cuda", action='store_true', help="")
 parser.add_argument("-train_from", default="", type=str, help="")
@@ -230,7 +230,7 @@ parser.add_argument("-clip", default=1, type=float, help="")
 parser.add_argument("-wd", default=0.0001, type=float, help="")
 parser.add_argument("-warmup_prop", default=0.2, type=float)
 parser.add_argument('-epochs', type=int, default=10, help='')
-parser.add_argument('-log_interval', type=int, default=100, help='')
+parser.add_argument('-log_interval', type=int, default=1000, help='')
 parser.add_argument('-save', type=str, default='', help='path to save the final model')
 
 parser.add_argument('-ne_per_sent', type=int, default=50, help='')
@@ -246,7 +246,7 @@ parser.add_argument("-detach_db", action='store_true', help="")
 parser.add_argument("-subsample_all", action='store_true', help="")
 parser.add_argument("-cachedir", type=str, default="/var/tmp/local/users/sjw68/hfstuff")
 parser.add_argument("-just_eval", type=str, default=None,
-                    choices=["dev", "dev-newne"], help="")
+                    choices=["dev", "dev-newne", "test", "test-newne"], help="")
 parser.add_argument("-transfer", action='store_true', help="")
 
 parser.add_argument("-dp_pred", action='store_true', help="")
@@ -362,14 +362,10 @@ if __name__ == "__main__":
             # note that ne_bsz and nne are just used for recomputing neighbors
             # and for the max ne stored per sent, resp. we control how many ne
             # are used at prediction time w/ eval_ne_per_sent
-            #sentdb.replace_val_w_test(args.val_sent_fi, args.val_tag_fi, tokenizer,
-            sentdb.replace_val_w_test(None, None, tokenizer,
-                                      newne_avg_bert_emb, device,
-                                      ne_bsz=1024, nne=200)
+            sentdb.replace_val_w_test(newne_avg_bert_emb, device,
+                                      ne_bsz=2048, nne=200)
         with torch.no_grad():
-            prec, rec, f1 = do_single_fscore(sentdb, model, device, args)
-            print("Eval: | P: {:3.5f} / R: {:3.5f} / F: {:3.5f}".format(
-                prec, rec, f1))
+            do_single_fscore(sentdb, model, device, args)
             sys.exit(0)
 
 

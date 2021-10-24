@@ -61,11 +61,10 @@ class SentDB(object):
         # if self.parampred:
         #     self.tag2idx = {tt: i for i, tt in enumerate(self.tagtypes)}
 
-    def replace_val_w_test(self, te_wrdfi, te_tagfi, tokenizer, emb_func, device,
-                           ne_bsz=128, nne=500, lower=False):
+    def replace_val_w_test(self, emb_func, device, ne_bsz=128, nne=500, lower=False):
         print("there were", len(self.vsent_words), "val sentences")
-        #self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
-        #    te_wrdfi, te_tagfi, tokenizer, lower=lower)
+        self.vsent_words, self.vsent_wpcs, self.vsent_tags = SentDB.get_wrd_pcs_tags(
+            "test", self.tagkey, self.tokenizer, self.cachedir, lower=lower)
         assert len(self.vsent_words) == len(self.vsent_wpcs)
         assert len(self.vsent_words) == len(self.vsent_tags)
         print("now there are", len(self.vsent_words), "val sentences")
