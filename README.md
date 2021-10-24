@@ -1,7 +1,8 @@
 Updated code for [Label-Agnostic Sequence Labeling by Copying Nearest Neighbors](https://www.aclweb.org/anthology/P19-1533.pdf). These updates include:
 - using (recent) Huggingface libraries where possible
 - dropping out neighbor embeddings when training
-which lead to better performance.
+
+These changes lead to a moderate but noticeable performance improvement.
 
 
 # Dependencies
